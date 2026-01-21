@@ -3,7 +3,8 @@
     "allow": [
       "Bash(python Ingestion_Manager.py:*)",
       "Bash(sqlite3:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(pip install:*)"
     ]
   }
 }

@@ -32,3 +32,10 @@ manager.clients.ClientLoadError: Could not load client 'mock': No module named '
 [2026-01-21 12:01:13] [INFO|ingestion.manager|load_schedule:38] Loaded schedule from schedules/weekly_schedule.json
 [2026-01-21 12:01:50] [INFO|ingestion.manager|create_logger:73] Logger Create
 [2026-01-21 12:01:50] [INFO|ingestion.manager|load_schedule:38] Loaded schedule from schedules/interval_schedule.json
+[2026-01-21 12:17:57] [INFO|ingestion.manager|create_logger:73] Logger Create
+[2026-01-21 12:32:05] [INFO|ingestion.manager|create_logger:73] Logger Create
+[2026-01-21 12:32:05] [INFO|ingestion.manager|load_schedule:50] Loaded schedule from schedules/interval_schedule.json
+[2026-01-21 12:55:10] [INFO|ingestion.manager|create_logger:73] Logger Create
+[2026-01-21 13:11:04] [INFO|ingestion.manager|create_logger:73] Logger Create
+[2026-01-21 13:11:45] [INFO|ingestion.manager|create_logger:73] Logger Create
+[2026-01-21 13:11:45] [INFO|ingestion.manager|load_schedule:50] Loaded schedule from schedules/vworld_schedule.json

@@ -11,3 +11,4 @@ build/
 *.tfstate*
 coverage/
 .DS_Store
+.claude/

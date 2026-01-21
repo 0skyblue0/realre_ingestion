@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sqlite3
 import threading
 from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Sequence
+
+import psycopg2
+import psycopg2.extras
 
 
 def _utcnow_iso() -> str:
@@ -14,33 +16,47 @@ def _utcnow_iso() -> str:
 
 class DBAdapter:
     """
-    Lightweight SQLite wrapper with history logging and SCD2 helpers.
+    PostgreSQL adapter with history logging and SCD2 helpers.
 
-    The adapter is intentionally simple to avoid external dependencies while
-    still providing transactional guarantees and optimistic concurrency for
+    The adapter provides transactional guarantees and optimistic concurrency for
     SCD2 upserts.
     """
 
-    def __init__(self, db_path: str):
-        self.db_path = db_path
+    def __init__(
+        self,
+        *,
+        host: str = "localhost",
+        port: int = 5432,
+        database: str = "realre_ingestion",
+        user: str = "postgres",
+        password: str = "",
+        dsn: str | None = None,
+    ):
         self._lock = threading.RLock()
-        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
-        self._configure()
+        if dsn:
+            self._conn = psycopg2.connect(dsn)
+        else:
+            self._conn = psycopg2.connect(
+                host=host,
+                port=port,
+                database=database,
+                user=user,
+                password=password,
+            )
+        self._conn.autocommit = False
         self.ensure_history_schema()
 
     # ------------------------------------------------------------------ setup
-    def _configure(self) -> None:
-        with self._conn:
-            self._conn.execute("PRAGMA journal_mode=WAL;")
-            self._conn.execute("PRAGMA synchronous=NORMAL;")
+    def _get_cursor(self):
+        return self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     def ensure_history_schema(self) -> None:
-        with self._conn:
-            self._conn.execute(
+        with self._lock:
+            cursor = self._get_cursor()
+            cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS ingestion_history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id SERIAL PRIMARY KEY,
                     job_name TEXT,
                     event_type TEXT,
                     status TEXT,
@@ -52,6 +68,7 @@ class DBAdapter:
                 );
                 """
             )
+            self._conn.commit()
 
     # ----------------------------------------------------------------- helpers
     def log_history(
@@ -69,12 +86,14 @@ class DBAdapter:
         payload = details
         if isinstance(details, Mapping):
             payload = json.dumps(details, ensure_ascii=False)
-        with self._lock, self._conn:
-            cursor = self._conn.execute(
+        with self._lock:
+            cursor = self._get_cursor()
+            cursor.execute(
                 """
                 INSERT INTO ingestion_history
                 (job_name, event_type, status, started_at, ended_at, duration_ms, row_count, details)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id;
                 """,
                 (
                     job_name,
@@ -87,14 +106,18 @@ class DBAdapter:
                     payload,
                 ),
             )
-        return int(cursor.lastrowid)
+            result = cursor.fetchone()
+            self._conn.commit()
+        return int(result["id"])
 
     def fetch_history(self, limit: int = 50) -> list[dict[str, Any]]:
-        with self._lock, self._conn:
-            rows = self._conn.execute(
-                "SELECT * FROM ingestion_history ORDER BY id DESC LIMIT ?;",
+        with self._lock:
+            cursor = self._get_cursor()
+            cursor.execute(
+                "SELECT * FROM ingestion_history ORDER BY id DESC LIMIT %s;",
                 (limit,),
-            ).fetchall()
+            )
+            rows = cursor.fetchall()
         return [dict(row) for row in rows]
 
     # ------------------------------------------------------------------- SCD2
@@ -106,11 +129,12 @@ class DBAdapter:
     ) -> None:
         key_cols = ", ".join(f"{name} TEXT NOT NULL" for name in key_fields)
         attr_cols = ", ".join(f"{name} TEXT" for name in attribute_fields)
-        with self._lock, self._conn:
-            self._conn.execute(
+        with self._lock:
+            cursor = self._get_cursor()
+            cursor.execute(
                 f"""
                 CREATE TABLE IF NOT EXISTS {table} (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id SERIAL PRIMARY KEY,
                     {key_cols},
                     {attr_cols},
                     valid_from TEXT NOT NULL,
@@ -121,12 +145,13 @@ class DBAdapter:
                 """
             )
             idx_cols = "_".join(key_fields)
-            self._conn.execute(
+            cursor.execute(
                 f"CREATE INDEX IF NOT EXISTS idx_{table}_{idx_cols} ON {table} ({', '.join(key_fields)});"
             )
-            self._conn.execute(
+            cursor.execute(
                 f"CREATE INDEX IF NOT EXISTS idx_{table}_current ON {table}(is_current);"
             )
+            self._conn.commit()
 
     def _compute_hash(self, record: Mapping[str, Any], fields: Sequence[str]) -> str:
         hasher = hashlib.sha256()
@@ -158,38 +183,41 @@ class DBAdapter:
 
         inserted = 0
         now = _utcnow_iso()
-        with self._lock, self._conn:
+        with self._lock:
+            cursor = self._get_cursor()
             for row in rows:
                 row_hash = self._compute_hash(row, attribute_fields)
                 key_values = [row[field] for field in key_fields]
-                placeholders = " AND ".join(f"{field}=?" for field in key_fields)
-                current = self._conn.execute(
+                placeholders = " AND ".join(f"{field}=%s" for field in key_fields)
+                cursor.execute(
                     f"""
                     SELECT id, row_hash FROM {table}
                     WHERE {placeholders} AND is_current=1
                     ORDER BY id DESC LIMIT 1;
                     """,
                     key_values,
-                ).fetchone()
+                )
+                current = cursor.fetchone()
                 if current and current["row_hash"] == row_hash:
                     continue
                 if current:
-                    self._conn.execute(
+                    cursor.execute(
                         f"""
                         UPDATE {table}
-                        SET valid_to=?, is_current=0
-                        WHERE id=?;
+                        SET valid_to=%s, is_current=0
+                        WHERE id=%s;
                         """,
                         (now, current["id"]),
                     )
                 columns = list(key_fields) + list(attribute_fields)
                 values = [row.get(col) for col in columns]
-                self._conn.execute(
+                cursor.execute(
                     f"""
                     INSERT INTO {table} ({', '.join(columns)}, valid_from, valid_to, is_current, row_hash)
-                    VALUES ({', '.join('?' for _ in columns)}, ?, ?, 1, ?);
+                    VALUES ({', '.join('%s' for _ in columns)}, %s, %s, 1, %s);
                     """,
                     (*values, now, "9999-12-31T00:00:00+00:00", row_hash),
                 )
                 inserted += 1
+            self._conn.commit()
         return inserted

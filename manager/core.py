@@ -22,12 +22,24 @@ class IngestionManager:
     def __init__(
         self,
         *,
-        db_path: str = "realre_ingestion.db",
+        db_host: str = "localhost",
+        db_port: int = 5432,
+        db_name: str = "realre_ingestion",
+        db_user: str = "postgres",
+        db_password: str = "",
+        db_dsn: str | None = None,
         async_mode: bool = False,
         logger_name: str = "ingestion.manager",
     ):
         self.logger = create_logger(logger_name)
-        self.db = DBAdapter(db_path)
+        self.db = DBAdapter(
+            host=db_host,
+            port=db_port,
+            database=db_name,
+            user=db_user,
+            password=db_password,
+            dsn=db_dsn,
+        )
         self.client_loader = ClientLoader()
         self.async_mode = async_mode
         self._schedule: Scheduler | None = None
@@ -152,7 +164,12 @@ class IngestionManager:
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Ingestion manager runner.")
     parser.add_argument("--schedule", required=True, help="Path to schedule JSON file.")
-    parser.add_argument("--db", default="realre_ingestion.db", help="SQLite database path.")
+    parser.add_argument("--db-host", default="localhost", help="PostgreSQL host.")
+    parser.add_argument("--db-port", type=int, default=5432, help="PostgreSQL port.")
+    parser.add_argument("--db-name", default="realre_ingestion", help="PostgreSQL database name.")
+    parser.add_argument("--db-user", default="postgres", help="PostgreSQL user.")
+    parser.add_argument("--db-password", default="", help="PostgreSQL password.")
+    parser.add_argument("--db-dsn", default=None, help="PostgreSQL DSN (overrides other db options).")
     parser.add_argument("--once", action="store_true", help="Run jobs that are due only once and exit.")
     parser.add_argument("--async", dest="async_mode", action="store_true", help="Enable asyncio execution.")
     parser.add_argument("--poll", type=int, default=5, help="Scheduler poll interval (seconds).")
@@ -161,7 +178,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 def run_from_cli(argv: list[str] | None = None) -> None:
     args = build_arg_parser().parse_args(argv)
-    manager = IngestionManager(db_path=args.db, async_mode=args.async_mode)
+    manager = IngestionManager(
+        db_host=args.db_host,
+        db_port=args.db_port,
+        db_name=args.db_name,
+        db_user=args.db_user,
+        db_password=args.db_password,
+        db_dsn=args.db_dsn,
+        async_mode=args.async_mode,
+    )
     manager.load_schedule(args.schedule)
     if args.once:
         manager.run_once()

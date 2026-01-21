@@ -5,17 +5,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 실행 명령어 (Commands)
 
 ```bash
-# 한 번만 실행
-python Ingestion_Manager.py --schedule schedules/interval_schedule.json --once
+# 한 번만 실행 (PostgreSQL 기본 연결: localhost:5432)
+python Ingestion_Manager.py --schedule schedules/interval_schedule.json --once --db-password <password>
 
 # 상시 스케줄링 (5초 간격 폴링)
-python Ingestion_Manager.py --schedule schedules/interval_schedule.json --poll 5
+python Ingestion_Manager.py --schedule schedules/interval_schedule.json --poll 5 --db-password <password>
 
 # 비동기 실행
-python Ingestion_Manager.py --schedule schedules/interval_schedule.json --async
+python Ingestion_Manager.py --schedule schedules/interval_schedule.json --async --db-password <password>
 
-# DB 경로 지정
-python Ingestion_Manager.py --schedule schedules/interval_schedule.json --db path/to/db.db
+# PostgreSQL 연결 옵션
+python Ingestion_Manager.py --schedule schedules/interval_schedule.json --once \
+    --db-host localhost --db-port 5432 --db-name realre_ingestion \
+    --db-user postgres --db-password <password>
+
+# DSN 문자열 사용
+python Ingestion_Manager.py --schedule schedules/interval_schedule.json --once \
+    --db-dsn "postgresql://user:pass@localhost:5432/realre_ingestion"
 ```
 
 ## 아키텍처 (Architecture)
@@ -65,7 +71,11 @@ Ingestion_Manager.py (진입점)
 - `call_vworld_api`: `clients/vworld/vworld_url.json` 메타데이터 기반 API 호출
 - `search_address`: 주소 검색 (ROAD → PARCEL 자동 폴백)
 
-## DB 스키마
+## DB 스키마 (PostgreSQL)
 
 - `ingestion_history`: job 실행 이력 (job_name, event_type, status, started_at, ended_at, duration_ms, row_count, details)
 - SCD2 테이블: `upsert_scd2` 호출 시 자동 생성, `valid_from`, `valid_to`, `is_current`, `row_hash` 컬럼 포함
+
+## 의존성
+
+- `psycopg2-binary`: PostgreSQL 연결용 (`pip install psycopg2-binary`)
