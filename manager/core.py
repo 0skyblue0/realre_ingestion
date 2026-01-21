@@ -118,6 +118,13 @@ class IngestionManager:
             raise RuntimeError(f"Unknown job '{job_name}'") from exc
 
     # ------------------------------------------------------------------- loops
+    async def _run_all_jobs_async(self, jobs: list) -> None:
+        tasks = []
+        for job in jobs:
+            job_callable = self._get_job_callable(job.name)
+            tasks.append(self._run_job_async(job.name, job_callable, job.args))
+        await asyncio.gather(*tasks)
+
     def run_once(self) -> None:
         if self._schedule is None:
             raise RuntimeError("Schedule not loaded.")
@@ -126,15 +133,12 @@ class IngestionManager:
         if not jobs:
             self.logger.info("No jobs due at %s", now.isoformat())
             return
-        tasks: list[Any] = []
-        for job in jobs:
-            job_callable = self._get_job_callable(job.name)
-            if self.async_mode:
-                tasks.append(self._run_job_async(job.name, job_callable, job.args))
-            else:
+        if self.async_mode:
+            asyncio.run(self._run_all_jobs_async(jobs))
+        else:
+            for job in jobs:
+                job_callable = self._get_job_callable(job.name)
                 self._run_job(job.name, job_callable, job.args)
-        if tasks:
-            asyncio.run(asyncio.gather(*tasks))
 
     def run_forever(self, poll_interval: int = 5) -> None:
         if self._schedule is None:

@@ -1,2 +1,34 @@
 [2026-01-02 18:32:36] [INFO|ingestion.manager|create_logger:73] Logger Create
 [2026-01-02 18:32:36] [INFO|ingestion.manager|load_schedule:38] Loaded schedule from schedules/interval_schedule.json
+[2026-01-06 18:34:07] [INFO|ingestion.manager|create_logger:73] Logger Create
+[2026-01-21 11:59:33] [INFO|ingestion.manager|create_logger:73] Logger Create
+[2026-01-21 11:59:33] [INFO|ingestion.manager|load_schedule:38] Loaded schedule from schedules/interval_schedule.json
+[2026-01-21 11:59:33] [WARNING|ingestion.manager|request_source_data:45] Falling back to mock client due to: Could not load client 'mock': No module named 'clients.mock'
+[2026-01-21 11:59:33] [ERROR|ingestion.manager|_run_job:106] Job fetch_transactions failed
+Traceback (most recent call last):
+  File "D:\Project\RealRe\realre_ingestion\manager\core.py", line 43, in request_source_data
+    module = self.client_loader.load(client)
+  File "D:\Project\RealRe\realre_ingestion\manager\clients.py", line 25, in load
+    raise ClientLoadError(f"Could not load client '{name}': {last_error}")
+manager.clients.ClientLoadError: Could not load client 'mock': No module named 'clients.mock'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Project\RealRe\realre_ingestion\manager\core.py", line 82, in _run_job
+    result = job_callable(manager=self, **args)
+  File "D:\Project\RealRe\realre_ingestion\jobs\fetch_transactions.py", line 17, in run
+    records = manager.request_source_data(source, client_method, limit=limit)
+  File "D:\Project\RealRe\realre_ingestion\manager\core.py", line 46, in request_source_data
+    module = self.client_loader.load("mock")
+  File "D:\Project\RealRe\realre_ingestion\manager\clients.py", line 25, in load
+    raise ClientLoadError(f"Could not load client '{name}': {last_error}")
+manager.clients.ClientLoadError: Could not load client 'mock': No module named 'clients.mock'
+[2026-01-21 12:00:42] [INFO|ingestion.manager|create_logger:73] Logger Create
+[2026-01-21 12:00:42] [INFO|ingestion.manager|load_schedule:38] Loaded schedule from schedules/interval_schedule.json
+[2026-01-21 12:01:08] [INFO|ingestion.manager|create_logger:73] Logger Create
+[2026-01-21 12:01:08] [INFO|ingestion.manager|load_schedule:38] Loaded schedule from schedules/interval_schedule.json
+[2026-01-21 12:01:13] [INFO|ingestion.manager|create_logger:73] Logger Create
+[2026-01-21 12:01:13] [INFO|ingestion.manager|load_schedule:38] Loaded schedule from schedules/weekly_schedule.json
+[2026-01-21 12:01:50] [INFO|ingestion.manager|create_logger:73] Logger Create
+[2026-01-21 12:01:50] [INFO|ingestion.manager|load_schedule:38] Loaded schedule from schedules/interval_schedule.json
