@@ -120,6 +120,38 @@ class DBAdapter:
             rows = cursor.fetchall()
         return [dict(row) for row in rows]
 
+    def execute_query(
+        self,
+        query: str,
+        params: tuple | None = None,
+    ) -> list[dict[str, Any]]:
+        """
+        Execute a raw SQL query and return results.
+
+        Parameters
+        ----------
+        query:
+            SQL query string.
+        params:
+            Optional query parameters.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            Query results as list of dictionaries.
+        """
+        with self._lock:
+            cursor = self._get_cursor()
+            if params:
+                cursor.execute(query, params)
+            else:
+                cursor.execute(query)
+            if cursor.description:
+                rows = cursor.fetchall()
+                return [dict(row) for row in rows]
+            self._conn.commit()
+            return []
+
     # ------------------------------------------------------------------- SCD2
     def ensure_scd2_table(
         self,

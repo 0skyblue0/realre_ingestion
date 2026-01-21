@@ -39,3 +39,25 @@ manager.clients.ClientLoadError: Could not load client 'mock': No module named '
 [2026-01-21 13:11:04] [INFO|ingestion.manager|create_logger:73] Logger Create
 [2026-01-21 13:11:45] [INFO|ingestion.manager|create_logger:73] Logger Create
 [2026-01-21 13:11:45] [INFO|ingestion.manager|load_schedule:50] Loaded schedule from schedules/vworld_schedule.json
+[2026-01-21 15:18:24] [INFO|ingestion.manager|create_logger:73] Logger Create
+[2026-01-21 15:18:24] [WARNING|ingestion.manager|request_source_data:57] Falling back to mock client due to: Could not load client 'land_trade': No module named 'clients.land_trade'
+[2026-01-21 15:18:46] [INFO|ingestion.manager|create_logger:73] Logger Create
+[2026-01-21 15:18:46] [INFO|ingestion.manager|load_schedule:50] Loaded schedule from schedules/land_trade_schedule.json
+[2026-01-21 15:18:46] [INFO|ingestion.manager|run:233] Starting land trade fetch: LAWD_CD=11680, DEAL_YMD=202312
+[2026-01-21 15:18:47] [INFO|ingestion.manager|fetch_land_trade_data:128] Fetched page 1: 95 records (total: 95)
+[2026-01-21 15:18:47] [INFO|ingestion.manager|run:269] Saved 95 records to output\land_trade\land_trade_11680_202312_20260121_151847.csv
+[2026-01-21 15:26:51] [INFO|ingestion.manager|create_logger:73] Logger Create
+[2026-01-21 15:26:51] [INFO|ingestion.manager|load_schedule:50] Loaded schedule from schedules/land_trade_schedule.json
+[2026-01-21 15:26:51] [INFO|ingestion.manager|run:116] Starting land trade fetch: LAWD_CD=11680, DEAL_YMD=202312
+[2026-01-21 15:26:52] [INFO|ingestion.manager|on_page:130] Fetched page 1: 95 records (total: 95)
+[2026-01-21 15:26:52] [INFO|ingestion.manager|run:161] Saved 95 records to output\land_trade\land_trade_11680_202312_20260121_152652.csv
+[2026-01-21 16:58:51] [INFO|ingestion.manager|create_logger:73] Logger Create
+[2026-01-21 16:58:51] [INFO|ingestion.manager|__init__:68] Loaded config from config/settings.json
+[2026-01-21 16:58:51] [INFO|ingestion.manager|_init_key_manager:118] KeyManager initialized with storage: secrets/keys.json
+[2026-01-21 16:59:08] [INFO|ingestion.manager|create_logger:73] Logger Create
+[2026-01-21 16:59:08] [INFO|ingestion.manager|__init__:68] Loaded config from config/settings.json
+[2026-01-21 16:59:08] [INFO|ingestion.manager|_init_key_manager:118] KeyManager initialized with storage: secrets/keys.json
+[2026-01-21 17:00:24] [INFO|ingestion.manager|create_logger:73] Logger Create
+[2026-01-21 17:00:24] [INFO|ingestion.manager|__init__:69] Loaded config from config/settings.json
+[2026-01-21 17:00:24] [INFO|ingestion.manager|_init_key_manager:121] KeyManager initialized with storage: secrets/keys.json
+[2026-01-21 17:00:24] [INFO|ingestion.manager|load_schedule:164] Loaded schedule from config/schedules.json

@@ -1,0 +1,44 @@
+{
+  "schema": "2.0",
+  "jobs": [
+    {
+      "name": "update_region_codes",
+      "description": "법정동 코드 목록 갱신",
+      "schedule": {
+        "type": "cron",
+        "expression": "0 0 1 * *"
+      },
+      "args": {
+        "output_table": "region_codes"
+      },
+      "enabled": true
+    },
+    {
+      "name": "download_trade",
+      "description": "토지 실거래가 전체 다운로드",
+      "schedule": {
+        "type": "cron",
+        "expression": "0 2 * * 0"
+      },
+      "args": {
+        "output_dir": "output/land_trade",
+        "deal_months": 1
+      },
+      "enabled": true
+    },
+    {
+      "name": "analyze_trade_data",
+      "description": "실거래가 데이터 분석",
+      "schedule": {
+        "type": "cron",
+        "expression": "0 6 * * 1"
+      },
+      "args": {
+        "input_dir": "output/land_trade",
+        "failed_output_dir": "output/failed_records"
+      },
+      "enabled": true,
+      "depends_on": ["download_trade"]
+    }
+  ]
+}

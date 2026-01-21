@@ -12,3 +12,4 @@ build/
 coverage/
 .DS_Store
 .claude/
+temp_save/*

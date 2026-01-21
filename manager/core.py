@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,6 +15,27 @@ from .db import DBAdapter
 from .scheduler import Scheduler
 
 
+def _load_config(config_path: str | Path) -> dict[str, Any]:
+    """
+    Load configuration from JSON file.
+
+    Parameters
+    ----------
+    config_path:
+        Path to the settings JSON file.
+
+    Returns
+    -------
+    dict[str, Any]
+        Configuration dictionary.
+    """
+    path = Path(config_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+    raw = path.read_text(encoding="utf-8")
+    return json.loads(raw)
+
+
 class IngestionManager:
     """
     Orchestrates scheduled jobs, client access, and persistence.
@@ -22,30 +44,122 @@ class IngestionManager:
     def __init__(
         self,
         *,
-        db_host: str = "localhost",
-        db_port: int = 5432,
-        db_name: str = "realre_ingestion",
-        db_user: str = "postgres",
-        db_password: str = "",
+        passphrase: str | None = None,
+        config_path: str | Path = "config/settings.json",
+        # Legacy parameters for backward compatibility
+        db_host: str | None = None,
+        db_port: int | None = None,
+        db_name: str | None = None,
+        db_user: str | None = None,
+        db_password: str | None = None,
         db_dsn: str | None = None,
         async_mode: bool = False,
         logger_name: str = "ingestion.manager",
+        skip_db: bool = False,
     ):
         self.logger = create_logger(logger_name)
-        self.db = DBAdapter(
-            host=db_host,
-            port=db_port,
-            database=db_name,
-            user=db_user,
-            password=db_password,
-            dsn=db_dsn,
-        )
+        self.config: dict[str, Any] = {}
+        self.key_manager = None
+        self.passphrase = passphrase
+
+        # Try to load config if exists
+        config_file = Path(config_path)
+        if config_file.exists():
+            self.config = _load_config(config_path)
+            self.logger.info("Loaded config from %s", config_path)
+
+            # Initialize KeyManager if passphrase provided
+            if passphrase:
+                self._init_key_manager(passphrase)
+
+        # Determine DB connection parameters
+        # Priority: explicit params > config file > defaults
+        db_config = self.config.get("database", {})
+
+        final_db_host = db_host if db_host is not None else db_config.get("host", "localhost")
+        final_db_port = db_port if db_port is not None else db_config.get("port", 5432)
+        final_db_name = db_name if db_name is not None else db_config.get("name", "realre_ingestion")
+        final_db_user = db_user if db_user is not None else db_config.get("user", "postgres")
+
+        # DB password: explicit param > key_manager > config > default
+        final_db_password = db_password
+        if final_db_password is None:
+            password_key = db_config.get("password_key")
+            if password_key and self.key_manager:
+                try:
+                    final_db_password = self.key_manager.get(password_key)
+                except Exception as exc:
+                    self.logger.warning("Failed to get DB password from key_manager: %s", exc)
+            if final_db_password is None:
+                final_db_password = db_config.get("password", "")
+
+        self.db = None
+        if not skip_db:
+            self.db = DBAdapter(
+                host=final_db_host,
+                port=final_db_port,
+                database=final_db_name,
+                user=final_db_user,
+                password=final_db_password,
+                dsn=db_dsn,
+            )
         self.client_loader = ClientLoader()
         self.async_mode = async_mode
         self._schedule: Scheduler | None = None
 
+    def _init_key_manager(self, passphrase: str) -> None:
+        """Initialize KeyManager from config settings."""
+        from key_manager import KeyManager
+
+        km_config = self.config.get("key_manager", {})
+        storage_path = km_config.get("storage_path", "secrets/keys.json")
+
+        self.key_manager = KeyManager(
+            storage_path=storage_path,
+            passphrase=passphrase,
+        )
+        self.logger.info("KeyManager initialized with storage: %s", storage_path)
+
+    def get_api_key(self, key_name: str) -> str:
+        """
+        Retrieve an API key from KeyManager.
+
+        Parameters
+        ----------
+        key_name:
+            Key identifier in the secrets storage.
+
+        Returns
+        -------
+        str
+            Decrypted API key.
+
+        Raises
+        ------
+        KeyError
+            If key not found or KeyManager not initialized.
+        """
+        if self.key_manager is None:
+            raise RuntimeError(
+                "KeyManager not initialized. Provide passphrase when creating IngestionManager."
+            )
+        value = self.key_manager.get(key_name)
+        if value is None:
+            raise KeyError(f"API key '{key_name}' not found in key_manager")
+        return value
+
     # ---------------------------------------------------------------- schedule
-    def load_schedule(self, schedule_path: str | Path) -> None:
+    def load_schedule(self, schedule_path: str | Path | None = None) -> None:
+        """
+        Load job schedule from file.
+
+        Parameters
+        ----------
+        schedule_path:
+            Path to schedule JSON file. If None, uses schedule_file from config.
+        """
+        if schedule_path is None:
+            schedule_path = self.config.get("schedule_file", "config/schedules.json")
         self._schedule = Scheduler.from_file(schedule_path)
         self.logger.info("Loaded schedule from %s", schedule_path)
 
@@ -78,6 +192,24 @@ class IngestionManager:
             key_fields=key_fields,
             attribute_fields=attribute_fields,
         )
+
+    def execute_query(self, query: str, params: tuple | None = None) -> list[dict[str, Any]]:
+        """
+        Execute a raw SQL query and return results.
+
+        Parameters
+        ----------
+        query:
+            SQL query string.
+        params:
+            Optional query parameters.
+
+        Returns
+        -------
+        list[dict[str, Any]]
+            Query results as list of dictionaries.
+        """
+        return self.db.execute_query(query, params)
 
     # -------------------------------------------------------------------- jobs
     def _run_job(self, job_name: str, job_callable: Callable[..., Any], args: dict[str, Any]) -> None:
@@ -162,32 +294,83 @@ class IngestionManager:
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Ingestion manager runner.")
-    parser.add_argument("--schedule", required=True, help="Path to schedule JSON file.")
-    parser.add_argument("--db-host", default="localhost", help="PostgreSQL host.")
-    parser.add_argument("--db-port", type=int, default=5432, help="PostgreSQL port.")
-    parser.add_argument("--db-name", default="realre_ingestion", help="PostgreSQL database name.")
-    parser.add_argument("--db-user", default="postgres", help="PostgreSQL user.")
-    parser.add_argument("--db-password", default="", help="PostgreSQL password.")
-    parser.add_argument("--db-dsn", default=None, help="PostgreSQL DSN (overrides other db options).")
-    parser.add_argument("--once", action="store_true", help="Run jobs that are due only once and exit.")
-    parser.add_argument("--async", dest="async_mode", action="store_true", help="Enable asyncio execution.")
-    parser.add_argument("--poll", type=int, default=5, help="Scheduler poll interval (seconds).")
+    """
+    Build argument parser with minimal CLI.
+
+    Required:
+        --passphrase: Passphrase for KeyManager decryption
+
+    Optional:
+        --config: Path to settings.json (default: config/settings.json)
+        --schedule: Override schedule file from config
+        --once: Run once and exit
+        --dry-run: Validate schedule without executing
+        --async: Enable async execution
+        --poll: Poll interval in seconds
+    """
+    parser = argparse.ArgumentParser(
+        description="Ingestion manager - minimal CLI with JSON config."
+    )
+    parser.add_argument(
+        "--passphrase",
+        required=True,
+        help="Passphrase for KeyManager decryption.",
+    )
+    parser.add_argument(
+        "--config",
+        default="config/settings.json",
+        help="Path to settings JSON file (default: config/settings.json).",
+    )
+    parser.add_argument(
+        "--schedule",
+        default=None,
+        help="Override schedule file from config.",
+    )
+    parser.add_argument(
+        "--once",
+        action="store_true",
+        help="Run jobs that are due only once and exit.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate schedule without executing jobs.",
+    )
+    parser.add_argument(
+        "--async",
+        dest="async_mode",
+        action="store_true",
+        help="Enable asyncio execution.",
+    )
+    parser.add_argument(
+        "--poll",
+        type=int,
+        default=5,
+        help="Scheduler poll interval (seconds).",
+    )
     return parser
 
 
 def run_from_cli(argv: list[str] | None = None) -> None:
     args = build_arg_parser().parse_args(argv)
+
     manager = IngestionManager(
-        db_host=args.db_host,
-        db_port=args.db_port,
-        db_name=args.db_name,
-        db_user=args.db_user,
-        db_password=args.db_password,
-        db_dsn=args.db_dsn,
+        passphrase=args.passphrase,
+        config_path=args.config,
         async_mode=args.async_mode,
+        skip_db=args.dry_run,  # Skip DB connection in dry-run mode
     )
-    manager.load_schedule(args.schedule)
+
+    schedule_path = args.schedule
+    manager.load_schedule(schedule_path)
+
+    if args.dry_run:
+        print("Dry run mode - schedule validated successfully.")
+        print(f"Loaded {len(manager._schedule.jobs)} enabled jobs:")
+        for job in manager._schedule.jobs:
+            print(f"  - {job.name}: {job.description or '(no description)'}")
+        return
+
     if args.once:
         manager.run_once()
     else:

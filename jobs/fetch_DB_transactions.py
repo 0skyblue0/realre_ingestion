@@ -7,7 +7,7 @@ def run(
     *,
     manager: Any,
     source: str = "mock",
-    client_method: str = "fetch_transactions",
+    client_method: str = "fetch_DB_transactions",
     limit: int = 5,
     scd_table: str = "transactions_scd",
 ) -> dict[str, Any]:

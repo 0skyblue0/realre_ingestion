@@ -12,5 +12,5 @@ from key_manager import KeyManager
 manager = KeyManager("secrets/keys.json", passphrase="", auto_persist=True)
 
 # passphrase -> 
-manager.set("", "")
+manager.set("opendata", "")
 # manager.delete("")

@@ -1,0 +1,15 @@
+{
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "name": "realre_ingestion",
+    "user": "postgres",
+    "password_key": ""
+  },
+  "key_manager": {
+    "storage_path": "secrets/keys.json"
+  },
+  "schedule_file": "config/schedules.json",
+  "output_dir": "output",
+  "log_level": "INFO"
+}

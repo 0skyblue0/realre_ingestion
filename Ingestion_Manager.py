@@ -3,7 +3,12 @@ Central entrypoint for the data ingestion manager.
 
 Usage
 -----
-python Ingestion_Manager.py --schedule schedules/interval_schedule.json --once
+# Minimal CLI - only passphrase required
+python Ingestion_Manager.py --passphrase <passphrase>
+
+# With options
+python Ingestion_Manager.py --passphrase <passphrase> --config config/settings.json --once
+python Ingestion_Manager.py --passphrase <passphrase> --dry-run
 
 CLI flags mirror :func:`manager.core.build_arg_parser`.
 """

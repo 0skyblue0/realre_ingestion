@@ -1,0 +1,11 @@
+# Database
+psycopg2-binary>=2.9.0
+
+# HTTP client
+requests>=2.28.0
+
+# Scheduling
+croniter>=1.3.0
+
+# Date utilities
+python-dateutil>=2.8.0

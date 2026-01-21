@@ -6,6 +6,12 @@ from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, List
 
+try:
+    from croniter import croniter
+    HAS_CRONITER = True
+except ImportError:
+    HAS_CRONITER = False
+
 
 def _parse_time(value: str) -> time:
     hour, minute = [int(part) for part in value.split(":", 1)]
@@ -31,6 +37,9 @@ class ScheduledJob:
     args: dict[str, Any] = field(default_factory=dict)
     schedule: dict[str, Any] = field(default_factory=dict)
     next_run: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    description: str = ""
+    enabled: bool = True
+    depends_on: list[str] = field(default_factory=list)
 
     def compute_next_run(self, now: datetime) -> datetime:
         schedule_type = self.schedule.get("type", "interval")
@@ -52,7 +61,28 @@ class ScheduledJob:
             if candidate <= now:
                 candidate = candidate + timedelta(days=7)
             return candidate
+        if schedule_type == "cron":
+            expression = self.schedule.get("expression", "0 0 * * *")
+            return self._compute_next_run_cron(expression, now)
         return now
+
+    def _compute_next_run_cron(self, expression: str, now: datetime) -> datetime:
+        """
+        Compute next run time from cron expression.
+
+        Requires croniter library: pip install croniter
+        """
+        if not HAS_CRONITER:
+            raise RuntimeError(
+                "croniter library is required for cron schedules. "
+                "Install with: pip install croniter"
+            )
+        # croniter expects naive datetime or handles timezone internally
+        naive_now = now.replace(tzinfo=None) if now.tzinfo else now
+        cron = croniter(expression, naive_now)
+        next_run = cron.get_next(datetime)
+        # Return with UTC timezone
+        return next_run.replace(tzinfo=timezone.utc)
 
     def due(self, now: datetime) -> bool:
         return now >= self.next_run
@@ -71,11 +101,18 @@ class Scheduler:
         payload = json.loads(raw)
         jobs: List[ScheduledJob] = []
         for entry in payload.get("jobs", []):
+            # Skip disabled jobs
+            enabled = entry.get("enabled", True)
+            if not enabled:
+                continue
             jobs.append(
                 ScheduledJob(
                     name=entry["name"],
                     args=entry.get("args", {}),
                     schedule=entry.get("schedule", {"type": "interval", "seconds": 300}),
+                    description=entry.get("description", ""),
+                    enabled=enabled,
+                    depends_on=entry.get("depends_on", []),
                 )
             )
         return cls(jobs)
